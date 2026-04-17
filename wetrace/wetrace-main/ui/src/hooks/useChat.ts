@@ -1,0 +1,19 @@
+import { useSearchParams } from 'react-router-dom'
+
+export function useChat() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTalker = searchParams.get('talker')
+
+  const setActiveTalker = (talker: string | null) => {
+    if (talker) {
+      setSearchParams({ talker })
+    } else {
+      setSearchParams({})
+    }
+  }
+
+  return {
+    activeTalker,
+    setActiveTalker
+  }
+}
