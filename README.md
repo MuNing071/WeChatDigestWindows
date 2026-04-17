@@ -29,9 +29,11 @@ python digest.py run "AI实践" 2026-04-13
 | 命令 | 说明 |
 |------|------|
 | `groups [--json]` | 列出所有群聊，支持 JSON 输出 |
+| `contacts [--json]` | 导出联系人映射 |
 | `extract <群名> <日期> [--json] [-o file]` | 提取消息 |
 | `summarize <群名> <日期> [-o file]` | LLM 生成摘要 |
 | `run <群名> <日期>` | 一键全流程（解密+提取+摘要） |
+| `batch <群名> --last-n N` | 批量生成多天摘要 |
 | `decrypt` | 解密所有微信数据库 |
 | `test-api` | 测试 LLM API 连接 |
 | `config --show/--set KEY=VALUE/--init` | 查看/修改配置 |
@@ -67,34 +69,57 @@ python digest.py run "AI实践" 2026-04-13
 
 ```
 e:/微信群聊总结/
-├── digest.py                    # ⭐ 统一CLI入口（替代旧的5个独立脚本）
+├── digest.py                    # ⭐ 统一CLI入口
 ├── README.md                    # 本文件
 ├── HANDOFF_GUIDE.md             # 完整接手者文档（踩坑记录+详细配置）
 │
-├── run_doubao.py                # 旧版一键脚本（保留为参考，已被 digest.py 替代）
-├── decrypt_active.py            # 旧版解密脚本（保留为参考）
-├── find_ai_practice.py          # 旧版群搜索脚本（保留为参考）
-├── extract_apr15.py             # 旧版消息提取脚本（保留为参考）
-├── test_doubao.py              # 旧版API测试脚本（保留为参考）
-│
-├── wechat-digest/               # 核心模块（解密/提取/LLM）
+├── wechat-digest/               # ⭐ 核心模块库
 │   ├── crypto/                  # SQLCipher 4 解密核心（支持WAL合并）
-│   ├── extract-messages.py      # 群聊消息提取（支持命令行参数）
+│   │   ├── decrypt.py           # 解密+WAL合并实现
+│   │   ├── config.py            # 配置加载+数据目录自动检测
+│   │   └── keys/                # 密钥扫描器（Windows/Mac/Linux）
+│   ├── extract-messages.py      # 消息提取（命令行工具）
 │   ├── extract_decrypted.py     # 从已解密DB提取（Wetrace兼容）
 │   ├── llm_summarize.py         # LLM 摘要（多厂商支持）
-│   └── prompt-template.txt      # Prompt 模板
+│   ├── init-keys.py             # 密钥提取入口
+│   ├── voice_to_text.py         # 语音转文字（可选）
+│   ├── biz-articles.py          # 公众号文章抓取（可选）
+│   └── prompt-template.txt       # Prompt 模板
 │
-├── wechat-decrypt-full/         # 第三方解密库（参考）
-├── wetrace/                     # Wetrace 可视化工具源码
-├── wetrace-bin/                 # Wetrace 编译产物 + 密钥Hook工具
+├── wetrace-bin/                 # Wetrace 编译产物 + 密钥Hook工具 + 已解密数据
+│   └── wetrace/data/            # 已解密数据库（session/message/contact）
 │
-├── scripts/                     # 开发调试脚本归档
-│   ├── archive/                 # 历史版本脚本
-│   ├── debug/                   # 检查验证类脚本
-│   └── inspect/                 # DB/schema检查 + 调试产出
+├── utils/                       # 扩展工具目录
+├── scripts/                     # 工具脚本
+│   ├── daily_stats.py           # 每日统计
+│   ├── debug/list_groups.py     # 诊断：列出群组
+│   └── inspect/                 # 数据库检查工具
 │
-├── output/                      # 最终产出（摘要Markdown）
-└── .workbuddy/memory/           # 工作记忆
+├── scripts/archive/             # 归档（旧版本/参考代码，不影响主流程）
+│   ├── run_doubao.py           # 旧版一键脚本（已被digest.py替代）
+│   ├── decrypt_active.py        # 旧版解密脚本
+│   ├── find_ai_practice.py     # 旧版群搜索
+│   ├── extract_apr15.py        # 旧版消息提取
+│   ├── test_doubao.py          # 旧版API测试
+│   ├── wechat-decrypt-full/    # 第三方解密库（参考）
+│   └── wetrace/                # Wetrace 源码（参考）
+│
+└── output/                      # 最终产出（摘要Markdown）
+```
+
+## 版本控制
+
+项目使用 Git 管理，出错时可回退：
+
+```powershell
+# 查看提交历史
+git log --oneline
+
+# 回退到基线版本（重构前）
+git reset --hard HEAD~1
+
+# 查看当前状态
+git status
 ```
 
 ## Agent 友好设计
@@ -106,18 +131,6 @@ e:/微信群聊总结/
 - **错误信息**: 明确的错误提示，不使用 bare except
 - **无交互**: 所有命令非交互式，不会因为 stdin 不可用而卡住
 - **敏感信息外置**: API Key 和密码从环境变量/配置文件读取，不硬编码
-
-## 核心配置要点
-
-| 配置项 | 位置 | 说明 |
-|--------|------|------|
-| 微信数据目录 | `~/.wechat-digest/config.json` → `db_dir` | 加密数据库所在目录 |
-| 已解密目录 | `~/.wechat-digest/config.json` → `decrypted_dir` | wetrace 解密输出目录 |
-| 群名映射 | `~/.wechat-digest/config.json` → `known` | 群名到 username 的映射 |
-| LLM 配置 | 环境变量 或 `llm_config.json` | API Key、模型、endpoint |
-| 数据库密钥 | 环境变量 `WECHAT_DB_KEY` | 通过 Wetrace 从进程内存提取 |
-
-已知群映射: `"AI实践"` → `49710605556@chatroom`
 
 ## 常见问题
 

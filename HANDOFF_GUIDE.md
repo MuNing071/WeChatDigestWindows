@@ -213,53 +213,47 @@ python e:\微信群聊总结\run_doubao.py
 ```
 e:/微信群聊总结/
 │
-├── digest.py                     # ⭐ 统一CLI入口（7个子命令，替代旧版5脚本）
+├── digest.py                     # ⭐ 统一CLI入口（9个子命令）
 ├── README.md                     # 工作区总览（快速开始指南）
 ├── HANDOFF_GUIDE.md              # 本文件（完整接手者文档）
 │
-├── run_doubao.py                 # [旧版] 一键运行脚本（已被 digest.py 替代）
-├── decrypt_active.py             # [旧版] 解密脚本（已被 digest.py decrypt 替代）
-├── find_ai_practice.py           # [旧版] 群搜索工具（已被 digest.py groups 替代）
-├── extract_apr15.py              # [旧版] 消息提取工具（已被 digest.py extract 替代）
-├── test_doubao.py               # [旧版] API测试工具（已被 digest.py test-api 替代）
-│
-├── wechat-digest/                # [Git Clone] wechat-digest 项目源码
-│   ├── init-keys.py              # 密钥提取入口
-│   ├── extract-messages.py       # 消息提取（命令行工具，digest.py 复用其逻辑）
+├── wechat-digest/                # ⭐ 核心模块库（Git Clone）
+│   ├── crypto/                   # 解密核心
+│   │   ├── decrypt.py            # ⭐ SQLCipher 4 解密（WAL合并）
+│   │   ├── config.py             # 配置加载+数据目录自动检测
+│   │   └── keys/                 # 密钥扫描器
+│   ├── extract-messages.py       # 消息提取命令行工具
 │   ├── extract_decrypted.py      # 从已解密DB提取（Wetrace兼容）
-│   ├── llm_summarize.py          # LLM 摘要（多厂商支持）
-│   ├── prompt-template.txt       # LLM 提示词模板
-│   └── crypto/
-│       ├── decrypt.py            # ⭐ SQLCipher 4 解密核心（支持WAL）
-│       ├── config.py             # 配置加载 + 数据目录自动检测
-│       └── keys/
-│           └── scanner_windows.py# Windows 内存扫描器
+│   ├── llm_summarize.py          # LLM 摘要
+│   ├── init-keys.py              # 密钥提取入口
+│   └── prompt-template.txt       # LLM Prompt 模板
 │
-├── wechat-decrypt-full/          # 第三方解密库完整版（参考用，crypto来源）
-├── wetrace/                      # Wetrace Go 项目源码（可视化前端）
-├── wetrace-bin/                  # Wetrace Go 项目编译产物
-│   └── wetrace/
-│       └── data/                 # 解密输出目录
-│           ├── message_active/   # ⭐ 含最新WAL数据的消息DB
-│           ├── message/          # Wetrace解密的消息DB
-│           ├── session/          # 会话列表DB
-│           └── contact/          # 联系人DB
+├── wetrace-bin/                  # Wetrace 编译产物 + 已解密数据
+│   └── wetrace/data/             # 已解密数据库
+│       ├── message_active/       # ⭐ 含最新WAL数据的消息DB
+│       ├── message/              # 消息DB
+│       ├── session/              # 会话列表DB
+│       └── contact/              # 联系人DB
 │
-├── scripts/                      # 开发调试脚本归档
-│   ├── archive/                  # 历史迭代版本
-│   │   ├── find_group.py ~ find_group5.py   # 群搜索迭代版本
-│   │   └── find_target.py                 # 早期搜索尝试
-│   ├── debug/                    # 检查验证类脚本
-│   │   ├── check_all_0415.py ~ check_fresh.py
-│   │   ├── deep_check.py
-│   │   ├── list_groups.py
-│   │   └── try_pycryptodome.py
-│   └── inspect/                  # DB/schema检查 + 调试产出
-│       ├── inspect_db.py / inspect_msg_schema.py / inspect_sessions.py
-│       ├── db-sessions.txt / db-structure.txt
-│       ├── diagnose_patterns.py          # 解密诊断工具
-│       └── extract_keys.py              # 密钥提取辅助
+├── scripts/                      # 工具脚本
+│   ├── daily_stats.py           # 每日统计
+│   ├── debug/list_groups.py      # 诊断：列出群组
+│   └── inspect/                  # 数据库检查工具
+│       ├── inspect_db.py         # DB概览
+│       ├── inspect_sessions.py   # 会话表检查
+│       ├── inspect_msg_schema.py # 消息表schema
+│       └── db-*.txt              # 诊断输出
 │
+├── scripts/archive/              # ⚠️ 归档（旧版本/参考代码）
+│   ├── run_doubao.py            # [旧版] 一键脚本（已被 digest.py 替代）
+│   ├── decrypt_active.py        # [旧版] 解密脚本
+│   ├── find_ai_practice.py      # [旧版] 群搜索
+│   ├── extract_apr15.py         # [旧版] 消息提取
+│   ├── test_doubao.py           # [旧版] API测试
+│   ├── wechat-decrypt-full/     # 第三方解密库完整版（参考）
+│   └── wetrace/                 # Wetrace 源码（参考）
+│
+├── utils/                        # 扩展工具目录（预留）
 ├── output/                       # 最终产出目录
 │
 └── .workbuddy/memory/            # 工作记忆
