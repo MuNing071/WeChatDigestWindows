@@ -338,10 +338,14 @@ def resolve_group(name, db_dir=None):
         return None
     cfg = load_config()
     known = cfg.get("known", {})
-    if name in known:
-        return known[name]
+    # 空格归一化（"ai 实践" -> "ai实践"），提升模糊匹配鲁棒性）
+    norm = lambda s: re.sub(r'\s+', '', s.lower())
+    norm_name = norm(name)
+    if norm_name in known or name in known:
+        return known.get(norm_name) or known.get(name)
     for k, v in known.items():
-        if name.lower() in k.lower() or k.lower() in name.lower():
+        norm_k = norm(k)
+        if norm_name in norm_k or norm_k in norm_name:
             return v
     if "@chatroom" in str(name).lower():
         return name
@@ -357,7 +361,7 @@ def resolve_group(name, db_dir=None):
                 ).fetchall()
                 conn.close()
                 for username, summary in rows:
-                    if summary and name.lower() in str(summary).lower():
+                    if summary and norm_name in norm(str(summary)):
                         return username
             except Exception:
                 pass

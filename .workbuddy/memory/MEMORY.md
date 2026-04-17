@@ -2,6 +2,12 @@
 
 ## 项目架构
 
+### 项目已重构（2026-04-17）
+- 引入Git版本控制，基线提交bf320d8，可通过`git reset --hard HEAD~1`回退
+- 归档scripts/archive/：5个旧脚本+wechat-decrypt-full/+wetrace/源码
+- 精简scripts/：保留诊断工具（list_groups.py、inspect_*.py）
+- 更新README.md和HANDOFF_GUIDE.md
+
 ### digest.py CLI V3（当前主力入口）
 - 统一CLI工具，9个子命令：groups/contacts/extract/summarize/run/batch/decrypt/test-api/config
 - **V3功能（2026-04-17）**：
