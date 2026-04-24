@@ -22,48 +22,56 @@ PROVIDER_PRESETS = {
         "provider": "doubao",
         "base_url": "https://ark.cn-beijing.volces.com/api/v3",
         "model": "doubao-seed-2-0-lite-260215",
+        "recommended": True,
     },
     "glm": {
         "label": "智谱 GLM",
         "provider": "glm",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "model": "glm-4-flash",
+        "recommended": False,
     },
     "deepseek": {
         "label": "DeepSeek",
         "provider": "deepseek",
         "base_url": "https://api.deepseek.com/v1",
         "model": "deepseek-chat",
+        "recommended": False,
     },
     "openai": {
         "label": "OpenAI",
         "provider": "openai",
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
+        "recommended": False,
     },
     "openrouter": {
         "label": "OpenRouter",
         "provider": "openai",
         "base_url": "https://openrouter.ai/api/v1",
         "model": "openai/gpt-4o-mini",
+        "recommended": False,
     },
     "siliconflow": {
         "label": "SiliconFlow",
         "provider": "openai",
         "base_url": "https://api.siliconflow.cn/v1",
         "model": "deepseek-ai/DeepSeek-V3",
+        "recommended": False,
     },
     "ollama": {
         "label": "Ollama (OpenAI Compatible)",
         "provider": "openai",
         "base_url": "http://127.0.0.1:11434/v1",
         "model": "qwen2.5:latest",
+        "recommended": False,
     },
     "custom": {
         "label": "Custom / OpenAI-Compatible",
         "provider": "openai",
         "base_url": "",
         "model": "",
+        "recommended": False,
     },
 }
 
@@ -83,6 +91,10 @@ def _load_cfg() -> dict[str, Any]:
         return {}
 
 
+def _default_output_dir() -> str:
+    return os.path.join(digest._SCRIPT_DIR, "output")
+
+
 def _date_range(start_date: str, end_date: str) -> list[str]:
     start = dt.date.fromisoformat(start_date)
     end = dt.date.fromisoformat(end_date)
@@ -96,18 +108,49 @@ def _date_range(start_date: str, end_date: str) -> list[str]:
     return dates
 
 
-def list_provider_presets() -> list[dict[str, str]]:
+def _report_records(output_dir: str, limit: int = 200) -> list[dict[str, Any]]:
+    if not output_dir or not os.path.isdir(output_dir):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for root, _dirs, files in os.walk(output_dir):
+        for name in files:
+            if not name.lower().endswith(".md"):
+                continue
+            path = os.path.join(root, name)
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            rows.append(
+                {
+                    "path": path,
+                    "name": name,
+                    "title": os.path.splitext(name)[0],
+                    "relative_path": os.path.relpath(path, output_dir),
+                    "modified_ts": stat.st_mtime,
+                    "modified": dt.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    "size": stat.st_size,
+                }
+            )
+    rows.sort(key=lambda item: item["modified_ts"], reverse=True)
+    return rows[:limit]
+
+
+def list_provider_presets() -> list[dict[str, Any]]:
     return [{"key": key, **value} for key, value in PROVIDER_PRESETS.items()]
 
 
 def load_app_state() -> dict[str, Any]:
     cfg = _load_cfg()
     llm_cfg = digest.load_llm_config()
+    output_dir = cfg.get("output_dir", _default_output_dir())
+    decrypted_dir = cfg.get("decrypted_dir", os.path.join(output_dir, "decrypted"))
     return {
         "app_name": APP_NAME,
         "db_dir": cfg.get("db_dir", ""),
-        "decrypted_dir": cfg.get("decrypted_dir", os.path.join(digest._SCRIPT_DIR, "output", "decrypted")),
-        "output_dir": cfg.get("output_dir", os.path.join(digest._SCRIPT_DIR, "output")),
+        "decrypted_dir": decrypted_dir,
+        "output_dir": output_dir,
         "known_count": len(cfg.get("known", {})),
         "provider": llm_cfg.get("provider", "doubao"),
         "model": llm_cfg.get("model", ""),
@@ -116,6 +159,8 @@ def load_app_state() -> dict[str, Any]:
         "batch_endpoint": llm_cfg.get("batch_endpoint", ""),
         "batch_api_key": llm_cfg.get("batch_api_key", ""),
         "language": cfg.get("app", {}).get("language", "zh"),
+        "has_decrypted_dir": bool(decrypted_dir and os.path.isdir(decrypted_dir)),
+        "report_count": len(_report_records(output_dir, limit=500)),
     }
 
 
@@ -167,6 +212,20 @@ def decrypt_databases() -> tuple[dict[str, Any], str]:
 def test_api() -> str:
     _, _, stderr = _capture_call(digest.cmd_test_api, argparse.Namespace())
     return stderr
+
+
+def output_root() -> str:
+    cfg = _load_cfg()
+    return cfg.get("output_dir", _default_output_dir())
+
+
+def list_reports(limit: int = 200) -> list[dict[str, Any]]:
+    return _report_records(output_root(), limit=limit)
+
+
+def read_report(path: str) -> str:
+    with open(path, "r", encoding="utf-8") as fh:
+        return fh.read()
 
 
 def preview_output_path(group_name: str, date_str: str, since_text: str = "") -> str:
@@ -250,7 +309,7 @@ def summarize_range(
         "mode": "range",
         "summary": "\n\n".join(sections),
         "report": "\n\n".join(sections),
-        "output_path": os.path.dirname(generated_files[0]) if generated_files else "",
+        "output_path": os.path.dirname(generated_files[0]) if generated_files else output_root(),
         "log": "\n\n".join(logs),
         "generated_files": generated_files,
     }

@@ -93,7 +93,7 @@ print(f'Saved raw chat to: {raw_path}')
 print('\nCalling Doubao API for summary...')
 
 # Volcano Engine (火山引擎) API Key - correct format is UUID only
-API_KEY = '66e9a0b0-837c-4f0f-a1f4-ee44413c04f9'
+API_KEY = 'your-doubao-api-key-uuid'
 MODEL = 'doubao-seed-2-0-lite-260215'
 ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
 

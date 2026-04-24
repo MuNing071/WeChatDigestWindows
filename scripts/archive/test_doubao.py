@@ -2,8 +2,8 @@
 import json, urllib.request, urllib.error
 
 keys = [
-    '66e9a0b0-837c-4f0f-a1f4-ee44413c04f9',
-    'api-key-2026031317183666e9a0b0-837c-4f0f-a1f4-ee44413c04f9',
+    'your-doubao-api-key-uuid',
+    'api-key-xxxxxxxx-your-doubao-api-key-uuid',
 ]
 
 for api_key in keys:

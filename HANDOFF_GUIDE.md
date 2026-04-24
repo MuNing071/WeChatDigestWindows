@@ -81,13 +81,13 @@ Get-ChildItem "E:\文档\WeChatFiles\xwechat_files\<wxid>\db_storage\message\mes
 
 用户从火山引擎控制台获取的 API Key 长这样：
 ```
-api-key-20260313171836
-66e9a0b0-837c-4f0f-a1f4-ee44413c04f9
+api-key-prefix-example
+your-doubao-api-key-uuid
 ```
 
 **正确的 Bearer Token 是纯 UUID 部分**：
 ```
-66e9a0b0-837c-4f0f-a1f4-ee44413c04f9
+your-doubao-api-key-uuid
 ```
 不要带 `api-key-` 前缀，也不要把两行拼起来。
 
@@ -372,7 +372,7 @@ e:/微信群聊总结/
 1. 提取 AI 实践群 4月15日全部消息共 **1123 条**
 2. 测试豆包 API Key 格式：
    - `api-key-xxx...` (带前缀) → 失败
-   - 纯 UUID `66e9a0b0-...` → ✅ 成功
+   - 纯 UUID `your-doubao-api-key-uuid` → ✅ 成功
 3. 构造 prompt（包含消息上下文 + 结构化摘要要求）
 4. 豆包 doubao-seed-2-0-lite-260215 生成高质量 5 维度摘要报告
 5. 输出到 `output/` 目录
