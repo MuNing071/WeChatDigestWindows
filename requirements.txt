@@ -1,0 +1,5 @@
+PySide6>=6.7
+pycryptodome>=3.19
+requests>=2.31
+zstandard>=0.22
+

@@ -1,149 +1,146 @@
-# 微信群聊总结 (WeChat Group Digest)
+# WeChatDigestWindows
 
-从微信本地加密数据库提取群聊记录，调用 LLM 生成结构化每日摘要。
+Windows-first tool for turning local WeChat chat history into structured daily summaries.
 
-## 快速开始
+It supports:
+
+- decrypting local WeChat SQLCipher databases
+- listing recent groups and direct messages
+- fuzzy session matching
+- extracting and compacting chat messages
+- generating Markdown summaries with an LLM
+- using either a CLI or a desktop GUI
+
+## What Changed In This Refactor
+
+This repo is being turned into a cleaner open-source product repo:
+
+- vendored dependency code instead of a nested Git checkout
+- GUI entry point in `run_gui.py`
+- reusable app code in `src/wechat_digest_app/`
+- local runtime data and personal outputs removed from version control
+- Windows desktop packaging under the product name `WeChatDigestWindows`
+
+## Quick Start
+
+### 1. Install dependencies
 
 ```powershell
-# 1. 配置环境变量（敏感信息不硬编码）
-$env:WECHAT_LLM_API_KEY = "your-api-key"
+pip install -r requirements.txt
+```
 
-# 2. 初始化配置
-python digest.py config --init
+### 2. Configure local runtime
 
-# 3. 列出所有群
+The app keeps personal config outside the repo:
+
+- `%USERPROFILE%\.wechat-digest\config.json`
+- `%USERPROFILE%\.wechat-digest\llm_config.json`
+- `%USERPROFILE%\.wechat-digest\all_keys.json`
+
+### 3. Launch the GUI
+
+```powershell
+python run_gui.py
+```
+
+The GUI now includes:
+
+- language switcher with Chinese default
+- setup help and privacy reminders
+- provider presets for Doubao, GLM, DeepSeek, OpenAI, OpenRouter, SiliconFlow, Ollama, and Custom
+- group and DM browsing
+- single-day and multi-day summary runs
+
+### 4. Or use the CLI
+
+```powershell
 python digest.py groups
-
-# 4. 提取消息
-python digest.py extract "AI实践" 2026-04-13
-
-# 5. 生成摘要
-python digest.py summarize "AI实践" 2026-04-13 -o output/2026-04-13-summary.md
-
-# 或者一键全流程
-python digest.py run "AI实践" 2026-04-13
+python digest.py groups --dm
+python digest.py summarize "ai 实践" 2026-04-16
+python digest.py summarize "ai 实践" today --since 14:00
+python digest.py batch "ai 实践" --last-n 7
 ```
 
-## CLI 子命令
-
-| 命令 | 说明 |
-|------|------|
-| `groups [--json]` | 列出所有群聊，支持 JSON 输出 |
-| `contacts [--json]` | 导出联系人映射 |
-| `extract <群名> <日期> [--json] [-o file]` | 提取消息 |
-| `summarize <群名> <日期> [-o file]` | LLM 生成摘要 |
-| `run <群名> <日期>` | 一键全流程（解密+提取+摘要） |
-| `batch <群名> --last-n N` | 批量生成多天摘要 |
-| `decrypt` | 解密所有微信数据库 |
-| `test-api` | 测试 LLM API 连接 |
-| `config --show/--set KEY=VALUE/--init` | 查看/修改配置 |
-
-## 配置
-
-配置文件: `~/.wechat-digest/config.json`
-
-敏感信息优先从环境变量读取，不硬编码在代码中：
-
-| 环境变量 | 说明 |
-|----------|------|
-| `WECHAT_LLM_API_KEY` | LLM API 密钥 |
-| `WECHAT_DB_KEY` | 数据库解密密钥 |
-| `LLM_PROVIDER` | LLM 提供商 (doubao/glm/deepseek/openai) |
-| `LLM_BASE_URL` | LLM API 地址 |
-| `LLM_MODEL` | 模型名称 |
-
-也支持 `~/.wechat-digest/llm_config.json` 单独配置 LLM。
-
-## 数据流
-
-```
-微信加密数据库 (SQLCipher 4, WAL模式)
-    → digest.py decrypt（解密+WAL合并）
-    → digest.py groups（列出群聊，支持模糊搜索）
-    → digest.py extract（提取消息，支持JSON输出）
-    → digest.py summarize（LLM摘要生成）
-    → output/ 摘要 Markdown
-```
-
-## 目录结构
-
-```
-e:/微信群聊总结/
-├── digest.py                    # ⭐ 统一CLI入口
-├── README.md                    # 本文件
-├── HANDOFF_GUIDE.md             # 完整接手者文档（踩坑记录+详细配置）
-│
-├── wechat-digest/               # ⭐ 核心模块库
-│   ├── crypto/                  # SQLCipher 4 解密核心（支持WAL合并）
-│   │   ├── decrypt.py           # 解密+WAL合并实现
-│   │   ├── config.py            # 配置加载+数据目录自动检测
-│   │   └── keys/                # 密钥扫描器（Windows/Mac/Linux）
-│   ├── extract-messages.py      # 消息提取（命令行工具）
-│   ├── extract_decrypted.py     # 从已解密DB提取（Wetrace兼容）
-│   ├── llm_summarize.py         # LLM 摘要（多厂商支持）
-│   ├── init-keys.py             # 密钥提取入口
-│   ├── voice_to_text.py         # 语音转文字（可选）
-│   ├── biz-articles.py          # 公众号文章抓取（可选）
-│   └── prompt-template.txt       # Prompt 模板
-│
-├── wetrace-bin/                 # Wetrace 编译产物 + 密钥Hook工具 + 已解密数据
-│   └── wetrace/data/            # 已解密数据库（session/message/contact）
-│
-├── utils/                       # 扩展工具目录
-├── scripts/                     # 工具脚本
-│   ├── daily_stats.py           # 每日统计
-│   ├── debug/list_groups.py     # 诊断：列出群组
-│   └── inspect/                 # 数据库检查工具
-│
-├── scripts/archive/             # 归档（旧版本/参考代码，不影响主流程）
-│   ├── run_doubao.py           # 旧版一键脚本（已被digest.py替代）
-│   ├── decrypt_active.py        # 旧版解密脚本
-│   ├── find_ai_practice.py     # 旧版群搜索
-│   ├── extract_apr15.py        # 旧版消息提取
-│   ├── test_doubao.py          # 旧版API测试
-│   ├── wechat-decrypt-full/    # 第三方解密库（参考）
-│   └── wetrace/                # Wetrace 源码（参考）
-│
-└── output/                      # 最终产出（摘要Markdown）
-```
-
-## 版本控制
-
-项目使用 Git 管理，出错时可回退：
+## Main Commands
 
 ```powershell
-# 查看提交历史
-git log --oneline
-
-# 回退到基线版本（重构前）
-git reset --hard HEAD~1
-
-# 查看当前状态
-git status
+python digest.py groups
+python digest.py groups --dm
+python digest.py extract "群名" 2026-04-15 --json
+python digest.py summarize "群名" 2026-04-15
+python digest.py summarize "群名" today --since 14:00
+python digest.py summarize "群名" --segment
+python digest.py batch "群名" --last-n 7
+python digest.py decrypt
+python digest.py test-api
+python digest.py config --show
 ```
 
-## Agent 友好设计
+## GUI Scope
 
-`digest.py` 专为 AI agent 交互优化：
+The desktop GUI focuses on the practical daily workflow:
 
-- **分步操作**: 每个子命令独立可调用，agent 可以先 groups 查看列表，再选择群提取
-- **JSON 输出**: `--json` 参数让所有命令返回结构化数据，方便程序解析
-- **错误信息**: 明确的错误提示，不使用 bare except
-- **无交互**: 所有命令非交互式，不会因为 stdin 不可用而卡住
-- **敏感信息外置**: API Key 和密码从环境变量/配置文件读取，不硬编码
+- set local paths and LLM settings
+- detect DB directory
+- decrypt local databases
+- browse groups and DMs by readable names
+- run summaries with common options
+- summarize a single day or a date range
+- inspect reports and logs
 
-## 常见问题
+## Repo Layout
 
-- **解密数据只有旧数据?** → 检查是否用了正确的活跃数据目录（详见 HANDOFF 第四节）
-- **WAL 未合并导致缺最新数据?** → 用 `digest.py decrypt` 或 wechat-digest/crypto/ 解密
-- **LLM API 返回 401?** → 检查环境变量 `WECHAT_LLM_API_KEY` 是否正确
-- **中文乱码?** → PowerShell 默认 GBK 编码，digest.py 已内置 UTF-8 处理
-- **groups 列出群但名字是 username?** → 在 config.json 的 known 字段添加映射
+```text
+.
+|-- digest.py
+|-- run_gui.py
+|-- src/
+|   `-- wechat_digest_app/
+|       |-- backend.py
+|       |-- gui.py
+|       `-- vendor/
+|-- tests/
+|-- examples/
+|-- ARCHITECTURE.md
+|-- BUILD.md
+|-- CONTRIBUTING.md
+|-- SECURITY.md
+`-- OPEN_SOURCE_GUI_REFACTOR_PLAN.md
+```
 
-完整踩坑记录和故障排查见 [HANDOFF_GUIDE.md](./HANDOFF_GUIDE.md)。
+## Privacy And Safety
 
-## 环境要求
+Do not commit:
 
-- Windows 11 + Python 3.12 + 微信 4.1.x
-- pip: pycryptodome, zstandard
-- 微信进程名 **Weixin.exe**（非 WeChat.exe）
+- decrypted databases
+- personal chat outputs
+- `.env` files with keys or machine paths
+- `%USERPROFILE%\.wechat-digest\` runtime config files
+- screenshots or examples containing private conversations
+
+Read [SECURITY.md](./SECURITY.md) before publishing or contributing.
+
+## Testing
+
+Smoke tests:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+The GUI smoke test uses Qt offscreen mode and does not require personal config.
+
+## Build A Windows App
+
+```powershell
+pip install pyinstaller
+pyinstaller --noconfirm app.spec
+```
+
+Build notes live in [BUILD.md](./BUILD.md).
+
+## Notes
+
+- Windows is the primary target for now.
+- The desktop GUI is intentionally a thin wrapper around the same core workflow as the CLI.
+- Historical research and archive material remains under `scripts/archive/`.

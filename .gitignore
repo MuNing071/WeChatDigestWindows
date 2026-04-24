@@ -15,9 +15,10 @@ env/
 *.swp
 *.swo
 
-# Sensitive data (密钥文件不上传)
+# Sensitive data
 *.json
 !.gitkeep
+*.env
 
 # Large binary files
 *.db
@@ -28,10 +29,15 @@ env/
 .DS_Store
 Thumbs.db
 
-# Go build outputs
-wetrace-bin/wetrace/*.exe
-wetrace-bin/*.dat
-
-# Decrypted data
+# Runtime outputs
+output/
 output/decrypted/
+wetrace-bin/
 wetrace-bin/wetrace/data/
+wechat-digest/
+.workbuddy/
+
+# Build and test
+build/
+dist/
+.pytest_cache/

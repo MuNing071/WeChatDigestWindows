@@ -26,13 +26,29 @@ from dataclasses import dataclass, asdict
 from typing import Optional
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_DIGEST_DIR = os.path.join(_SCRIPT_DIR, "wechat-digest")
-sys.path.insert(0, _DIGEST_DIR)
+_SRC_DIR = os.path.join(_SCRIPT_DIR, "src")
+_VENDORED_DIGEST_DIR = os.path.join(_SRC_DIR, "wechat_digest_app", "vendor", "wechat_digest")
+_LEGACY_DIGEST_DIR = os.path.join(_SCRIPT_DIR, "wechat-digest")
 
-# Fix Windows GBK encoding
-for s in (sys.stdout, sys.stderr):
-    if s.encoding and s.encoding.lower() != "utf-8":
-        setattr(sys, s.name, io.TextIOWrapper(s.buffer, encoding="utf-8", errors="replace"))
+for candidate in (_SRC_DIR, _VENDORED_DIGEST_DIR, _LEGACY_DIGEST_DIR):
+    if os.path.isdir(candidate) and candidate not in sys.path:
+        sys.path.insert(0, candidate)
+
+# Fix Windows console encoding when stdio streams exist.
+def _patch_stdio_encoding(stream_name: str) -> None:
+    stream = getattr(sys, stream_name, None)
+    if stream is None:
+        return
+    encoding = getattr(stream, "encoding", None)
+    buffer = getattr(stream, "buffer", None)
+    if not encoding or not buffer:
+        return
+    if encoding.lower() != "utf-8":
+        setattr(sys, stream_name, io.TextIOWrapper(buffer, encoding="utf-8", errors="replace"))
+
+
+_patch_stdio_encoding("stdout")
+_patch_stdio_encoding("stderr")
 
 try:
     import zstandard; HAS_ZSTD = True
@@ -333,22 +349,178 @@ def get_contacts(use_cache=True):
 # 群名解析
 # ============================================================
 
+def _split_words(text):
+    """将中文/英文混合文本拆分为关键词列表。
+    中文按单字拆分（因为中文没有空格分词），英文按空格拆分。
+    例：'AI实践群' -> ['ai', '实践', '群']  'practice ai 群' -> ['practice', 'ai', '群']
+    """
+    parts = re.findall(r'[a-zA-Z0-9]+|[\u4e00-\u9fff]', text.lower())
+    return [p for p in parts if len(p) > 0]
+
+
+def _token_overlap_score(query_words, target_words):
+    """计算两组关键词的交叉包含得分。
+    基于双向包含：query 关键词在 target 中的比例 + target 关键词在 query 中的比例。
+    返回 0.0-1.0 的分数。
+    """
+    if not query_words or not target_words:
+        return 0.0
+    q_set, t_set = set(query_words), set(target_words)
+    if not q_set or not t_set:
+        return 0.0
+    # query -> target 覆盖率
+    q_in_t = len(q_set & t_set) / len(q_set)
+    # target -> query 覆盖率（惩罚 target 过长但 query 很短的情况）
+    t_in_q = len(q_set & t_set) / len(t_set)
+    # 双向加权：query 侧权重大（用户输入通常更短更关键）
+    return q_in_t * 0.7 + t_in_q * 0.3
+
+
+def _get_active_groups(db_dir=None, include_dm=False):
+    """从 session.db + contact.db 获取活跃会话列表，返回 [(username, name, last_ts), ...]。
+    session.db 提供 last_timestamp（活跃度排序），contact.db 提供真实群名/联系人名。
+    include_dm=True 时同时返回一对一聊天会话。
+    缓存结果避免重复查询。
+    """
+    if not hasattr(_get_active_groups, '_cache'):
+        _get_active_groups._cache = None
+        _get_active_groups._cache_time = 0
+        _get_active_groups._cache_dm = None
+        _get_active_groups._cache_dm_time = 0
+
+    cache_key = '_dm' if include_dm else '_groups'
+    cache_val = getattr(_get_active_groups, cache_key, None)
+    cache_time_attr = cache_key + '_time'
+    cache_time = getattr(_get_active_groups, cache_time_attr, 0)
+
+    # 缓存 5 分钟
+    if cache_val and time.time() - cache_time < 300:
+        return cache_val
+
+    cfg = load_config()
+    if db_dir is None:
+        db_dir = cfg.get("decrypted_dir", "")
+    if not db_dir or not os.path.isdir(db_dir):
+        return []
+
+    # 1. 从 contact.db 读取联系人名映射 username -> name（群和个人都读）
+    contact_names = {}
+    for c in [os.path.join(db_dir, "contact", "contact.db"), os.path.join(db_dir, "contact.db")]:
+        if not os.path.exists(c):
+            continue
+        try:
+            conn = sqlite3.connect(c)
+            rows = conn.execute(
+                'SELECT username, nick_name, remark, alias FROM contact WHERE delete_flag = 0'
+            ).fetchall()
+            conn.close()
+            for username, nick, remark, alias in rows:
+                name = (remark or alias or nick or "").strip()
+                if name:
+                    contact_names[username] = name
+            break
+        except Exception:
+            continue
+
+    # 2. 从 session.db 读取活跃会话（按 last_timestamp 排序）
+    session_db = None
+    for c in [os.path.join(db_dir, "session", "session.db"), os.path.join(db_dir, "session.db")]:
+        if os.path.exists(c):
+            session_db = c; break
+
+    if not session_db:
+        return []
+
+    known_reverse = {v: k for k, v in cfg.get("known", {}).items()}
+    groups = []
+    try:
+        conn = sqlite3.connect(session_db)
+        if include_dm:
+            # 一对一：排除系统账号和公众号
+            rows = conn.execute(
+                "SELECT username, last_timestamp FROM SessionTable "
+                "WHERE username NOT LIKE '%@chatroom' "
+                "AND username NOT IN ('filehelper','notifymessage','brandsessionholder','brandservicesessionholder','@placeholder_foldgroup') "
+                "AND last_timestamp > 1700000000 "
+                "ORDER BY last_timestamp DESC"
+            ).fetchall()
+        else:
+            # 群聊
+            rows = conn.execute(
+                "SELECT username, last_timestamp FROM SessionTable "
+                "WHERE username LIKE '%@chatroom' ORDER BY last_timestamp DESC"
+            ).fetchall()
+        conn.close()
+        for username, last_ts in rows:
+            # 优先级：known_reverse > contact.db 名字 > username
+            name = known_reverse.get(username) or contact_names.get(username, username)
+            groups.append((username, name, last_ts))
+    except Exception:
+        pass
+
+    setattr(_get_active_groups, cache_key, groups)
+    setattr(_get_active_groups, cache_key + '_time', time.time())
+    return groups
+
+
 def resolve_group(name, db_dir=None):
+    """解析群名，返回 (chatroom_id, canonical_name) 元组。
+    canonical_name 是从 known 映射或 session.db 获取的标准群名，
+    用于输出目录归一化（避免同一群产生多个文件夹）。
+    """
     if not name:
-        return None
+        return None, name
     cfg = load_config()
     known = cfg.get("known", {})
+    known_reverse = {v: k for k, v in known.items()}
     # 空格归一化（"ai 实践" -> "ai实践"），提升模糊匹配鲁棒性）
     norm = lambda s: re.sub(r'\s+', '', s.lower())
     norm_name = norm(name)
-    if norm_name in known or name in known:
-        return known.get(norm_name) or known.get(name)
+
+    # 1. 精确匹配 known（归一化后）
+    if norm_name in known:
+        return known[norm_name], norm_name
+    if name in known:
+        return known[name], name
+
+    # 2. 子串包含匹配 known
     for k, v in known.items():
         norm_k = norm(k)
         if norm_name in norm_k or norm_k in norm_name:
-            return v
+            return v, k
+
+    # 3. @chatroom 直接返回
     if "@chatroom" in str(name).lower():
-        return name
+        canonical = known_reverse.get(name, name)
+        return name, canonical
+
+    # 4. 词级别模糊匹配（群聊 + 一对一聊天，最近活跃的优先）
+    query_words = _split_words(name)
+    if query_words:
+        candidates = []
+        # 先搜群聊（前50个）
+        for username, group_name, last_ts in _get_active_groups(db_dir, include_dm=False)[:50]:
+            target_words = _split_words(group_name)
+            score = _token_overlap_score(query_words, target_words)
+            if score >= 0.5:
+                candidates.append((score, last_ts, username, group_name))
+        # 再搜一对一聊天（前30个），阈值提高到 0.6（人名通常较短，避免误匹配）
+        for username, dm_name, last_ts in _get_active_groups(db_dir, include_dm=True)[:30]:
+            target_words = _split_words(dm_name)
+            score = _token_overlap_score(query_words, target_words)
+            if score >= 0.6:
+                candidates.append((score, last_ts, username, dm_name))
+        if candidates:
+            candidates.sort(key=lambda x: (-x[0], -x[1]))
+            best = candidates[0]
+            log.debug(f"[resolve] 模糊匹配 '{name}' -> '{best[3]}' ({best[2]}, score={best[0]:.2f})")
+            return best[2], best[3]
+
+    # 5. wxid_ 开头直接返回（一对一聊天 ID）
+    if str(name).startswith("wxid_") or str(name).startswith("gh_"):
+        return name, name
+
+    # 5. Fallback: 查 session.db（保留原始逻辑兼容）
     if db_dir:
         session_db = os.path.join(db_dir, "session", "session.db")
         if not os.path.exists(session_db):
@@ -362,10 +534,10 @@ def resolve_group(name, db_dir=None):
                 conn.close()
                 for username, summary in rows:
                     if summary and norm_name in norm(str(summary)):
-                        return username
+                        return username, summary or username
             except Exception:
                 pass
-    return name
+    return name, name
 
 
 # ============================================================
@@ -742,7 +914,8 @@ def load_prompt_template(prompt_path=None):
     candidates = [prompt_path] if prompt_path else []
     candidates.extend([
         os.path.join(STATE_DIR, "prompt-template.txt"),
-        os.path.join(_DIGEST_DIR, "prompt-template.txt"),
+        os.path.join(_VENDORED_DIGEST_DIR, "prompt-template.txt"),
+        os.path.join(_LEGACY_DIGEST_DIR, "prompt-template.txt"),
     ])
     for path in candidates:
         if path and os.path.exists(path):
@@ -957,32 +1130,84 @@ def cmd_groups(args):
     if not session_db:
         _error_exit("无法获取群列表，请先运行 decrypt", args.json)
 
+    is_dm = getattr(args, 'dm', False)
+
+    if is_dm:
+        sql = (
+            "SELECT username, summary, last_timestamp FROM SessionTable "
+            "WHERE username NOT LIKE '%@chatroom' "
+            "AND username NOT IN ('filehelper','notifymessage','brandsessionholder','brandservicesessionholder','@placeholder_foldgroup') "
+            "AND last_timestamp > 1700000000 "
+            "ORDER BY last_timestamp DESC"
+        )
+        contact_filter = ""  # 不限制 @chatroom
+    else:
+        sql = (
+            "SELECT username, summary, last_timestamp FROM SessionTable "
+            "WHERE username LIKE '%@chatroom' ORDER BY last_timestamp DESC"
+        )
+        contact_filter = "WHERE username LIKE '%@chatroom' AND"
+
     conn = sqlite3.connect(session_db)
-    rows = conn.execute(
-        "SELECT username, summary, last_timestamp FROM SessionTable "
-        "WHERE username LIKE '%@chatroom' ORDER BY last_timestamp DESC"
-    ).fetchall()
+    rows = conn.execute(sql).fetchall()
     conn.close()
+
+    # 从 contact.db 读取联系人名（群和个人都读）
+    contact_names = {}
+    if dec_dir and os.path.isdir(dec_dir):
+        for c in [os.path.join(dec_dir, "contact", "contact.db"), os.path.join(dec_dir, "contact.db")]:
+            if not os.path.exists(c):
+                continue
+            try:
+                cconn = sqlite3.connect(c)
+                crows = cconn.execute(
+                    'SELECT username, nick_name, remark, alias FROM contact '
+                    f"{contact_filter} delete_flag = 0"
+                ).fetchall()
+                cconn.close()
+                for username, nick, remark, alias in crows:
+                    name = (remark or alias or nick or "").strip()
+                    if name:
+                        contact_names[username] = name
+                break
+            except Exception:
+                continue
+
+    try:
+        for uid, name in get_contacts(use_cache=True).items():
+            if uid and name and uid not in contact_names:
+                contact_names[uid] = name
+    except Exception:
+        pass
 
     known_reverse = {v: k for k, v in cfg.get("known", {}).items()}
     results = []
     for username, summary, last_ts in rows:
+        name = known_reverse.get(username) or contact_names.get(username)
+        if not name and summary:
+            summary_text = str(summary).strip()
+            if summary_text and not summary_text.startswith("gh_") and len(summary_text) <= 40:
+                name = summary_text
+        if not name:
+            name = username
         results.append({
             "username": username,
-            "name": known_reverse.get(username, summary or username),
+            "name": name,
             "last_msg": (summary or "")[:80],
             "last_ts": last_ts,
             "last_time": datetime.datetime.fromtimestamp(last_ts).strftime("%Y-%m-%d %H:%M") if last_ts > 1e9 else "",
         })
 
+    label = "一对一聊天" if is_dm else "群聊"
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        print(f"\n=== 共 {len(results)} 个群聊 ===\n")
+        print(f"\n=== 共 {len(results)} 个{label} ===\n")
         for r in results:
             print(f"  {r['username']}")
             if r['name'] != r['username']:
-                print(f"    群名: {r['name']}")
+                name_label = "联系人" if is_dm else "群名"
+                print(f"    {name_label}: {r['name']}")
             if r['last_msg']:
                 print(f"    最近: {r['last_msg']}")
             if r['last_time']:
@@ -1012,19 +1237,19 @@ def cmd_contacts(args):
 # ============================================================
 
 def _do_extract(group_name, target_date, hour_offset=0, compact=False, no_cache=False, json_mode=False, since_min=0):
-    """提取消息的核心逻辑，返回 (messages_list, group_username)。
+    """提取消息的核心逻辑，返回 (messages_list, group_username, canonical_name)。
     since_min: 从当天第 since_min 分钟开始提取（用于 --since HH:MM）
     """
     cfg = load_config()
     dec_dir = cfg.get("decrypted_dir", "")
-    group_username = resolve_group(group_name, db_dir=dec_dir)
+    group_username, canonical_name = resolve_group(group_name, db_dir=dec_dir)
 
     # 检查缓存（since_min != 0 时不使用缓存，因为增量范围可变）
     cached = None if no_cache or since_min else load_extract_cache(group_username, target_date, compact)
     if cached:
         messages = [ChatMessage(**m) for m in cached.get("messages", [])]
         log.info(f"[cache] 命中缓存: {len(messages)} 条消息")
-        return messages, group_username
+        return messages, group_username, canonical_name
 
     contacts = get_contacts(use_cache=not no_cache)
     raw_rows, dctx = _extract_raw_rows(group_username, target_date, hour_offset, dec_dir, cfg, since_min=since_min)
@@ -1044,7 +1269,7 @@ def _do_extract(group_name, target_date, hour_offset=0, compact=False, no_cache=
         }
         save_extract_cache(group_username, target_date, compact, cache_data)
 
-    return messages, group_username
+    return messages, group_username, canonical_name
 
 
 def cmd_extract(args):
@@ -1054,8 +1279,8 @@ def cmd_extract(args):
     compact = getattr(args, 'compact', False)
     no_cache = getattr(args, 'no_cache', False)
 
-    messages, group_username = _do_extract(group_name, target_date, hour_offset, compact, no_cache)
-    print(f"群: {group_name} -> {group_username}", file=sys.stderr)
+    messages, group_username, canonical_name = _do_extract(group_name, target_date, hour_offset, compact, no_cache)
+    print(f"群: {group_name} -> {canonical_name} ({group_username})", file=sys.stderr)
     print(f"消息数: {len(messages)}", file=sys.stderr)
 
     if args.json:
@@ -1260,7 +1485,9 @@ def _parse_since(since_str):
 
 
 def _auto_output_path(group_name, date_str, since_min=0):
-    """自动生成输出路径：output/{safe_group}/{date}.md"""
+    """自动生成输出路径：output/{safe_group}/{date}.md
+    group_name: 优先使用 canonical_name（标准群名），保证同一群不会产生多个目录。
+    """
     cfg = load_config()
     out_root = cfg.get("output_dir", os.path.join(_SCRIPT_DIR, "output"))
     safe_group = _safe_name(group_name)
@@ -1280,7 +1507,7 @@ def cmd_summarize(args):
     do_segment = getattr(args, 'segment', False)
     batch_mode = getattr(args, 'batch_mode', False)
 
-    messages, group_username = _do_extract(
+    messages, group_username, canonical_name = _do_extract(
         group_name, target_date, hour_offset, compact, no_cache, since_min=since_min
     )
     if not messages:
@@ -1306,10 +1533,10 @@ def cmd_summarize(args):
     prompt_template = load_prompt_template(prompt_path)
     prompt_hash = hashlib.md5(prompt_template.encode()).hexdigest()
 
-    # 确定输出路径
+    # 确定输出路径（用 canonical_name 保证同一群不会产生多个目录）
     output_path = getattr(args, 'output', None)
     if not output_path:
-        output_path = _auto_output_path(group_name, target_date, since_min)
+        output_path = _auto_output_path(canonical_name, target_date, since_min)
 
     if do_segment:
         # ---- 分段摘要模式 ----
@@ -1666,6 +1893,7 @@ def main():
     p = subparsers.add_parser("groups", help="列出活跃群聊")
     p.add_argument("--date", help="筛选指定日期活跃的群")
     p.add_argument("--json", action="store_true", help="JSON 格式输出")
+    p.add_argument("--dm", "--dm", action="store_true", dest="dm", help="显示一对一聊天（而非群聊）")
 
     # contacts (V2新增)
     p = subparsers.add_parser("contacts", help="导出联系人ID→昵称映射")
