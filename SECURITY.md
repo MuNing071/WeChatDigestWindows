@@ -1,18 +1,8 @@
 # Security
 
-## Scope
-
 This project works with highly sensitive local data.
 
-That includes:
-
-- private chat history
-- local database paths
-- database decryption keys
-- model API keys
-- generated summaries derived from private conversations
-
-## Never Commit These
+## Never Commit
 
 - `%USERPROFILE%\\.wechat-digest\\all_keys.json`
 - `%USERPROFILE%\\.wechat-digest\\config.json`
@@ -20,27 +10,17 @@ That includes:
 - any `.env` file with real values
 - any decrypted `.db` file
 - any report generated from real chats
-- local inspection dumps under `scripts/inspect/`
-- screenshots that reveal private names, messages, or IDs
-- build output folders such as `build/` and `dist/`
+- screenshots that reveal private names, messages, IDs, or paths
+- local build and runtime folders such as `build/`, `dist/`, `output/`, and `wetrace-bin`
 
-## Public Repo Review
+## Public Repo Rule
 
-Before pushing a branch publicly, check:
-
-1. `git status` is clean except for intentional source changes.
-2. No local runtime folders are tracked: `output/`, `wetrace-bin/`, `.workbuddy/`.
-3. No machine-local config files are tracked.
-4. No docs contain real paths, real chatroom IDs, or copied secrets.
-5. Examples and screenshots are synthetic or fully redacted.
+If a file is only needed to run on one machine, inspect one private dataset, or
+remember one local environment, keep it outside the repository.
 
 ## Safer Documentation Practice
 
-- Use `Example Group`, `示例群聊`, or similar placeholder names.
-- Use `%USERPROFILE%` or `<your-path>` instead of real local paths.
-- Mask keys as `abc123...` only when showing format.
-- Do not paste database keys, even in historical handoff notes.
-
-## Reporting
-
-If you discover a privacy or exposure issue, report it privately with redacted evidence.
+- Use `Example Group` or `示例群聊`
+- Use `%USERPROFILE%` or `<your-path>` instead of real local paths
+- Never paste real database keys
+- Never paste real API keys
