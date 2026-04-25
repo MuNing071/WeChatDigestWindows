@@ -92,7 +92,7 @@ def _load_cfg() -> dict[str, Any]:
 
 
 def _default_output_dir() -> str:
-    return os.path.join(digest._SCRIPT_DIR, "output")
+    return digest.DEFAULT_OUTPUT_DIR
 
 
 def _date_range(start_date: str, end_date: str) -> list[str]:

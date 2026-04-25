@@ -15,7 +15,7 @@ Build the desktop app:
 pyinstaller --noconfirm app.spec
 ```
 
-Output:
+Expected output:
 
 - `dist/WeChatDigestWindows/WeChatDigestWindows.exe`
 
@@ -26,8 +26,16 @@ $env:QT_QPA_PLATFORM="offscreen"
 .\dist\WeChatDigestWindows\WeChatDigestWindows.exe --smoke-test
 ```
 
-## Notes
+## Build Notes
 
 - The build is Windows-first.
-- Personal runtime config still lives in `%USERPROFILE%\.wechat-digest\`.
-- Do not bundle private DBs, outputs, or `.env` files into releases.
+- Personal runtime state and default report output live in `%USERPROFILE%\\.wechat-digest\\`.
+- `app.spec` resolves files relative to the repository location, not the shell working directory.
+- Do not ship private DBs, outputs, `.env` files, or local config JSON files inside release bundles.
+
+## Recommended Release Bundle
+
+- executable folder from `dist/WeChatDigestWindows/`
+- README
+- SECURITY note
+- changelog or release notes

@@ -113,6 +113,8 @@ KEYS_FILE = os.path.join(STATE_DIR, "all_keys.json")
 LLM_CONFIG_FILE = os.path.join(STATE_DIR, "llm_config.json")
 CACHE_DIR = os.path.join(STATE_DIR, "cache")
 CONTACTS_CACHE = os.path.join(CACHE_DIR, "contacts_cache.json")
+DEFAULT_OUTPUT_DIR = os.path.join(STATE_DIR, "output")
+DEFAULT_DECRYPTED_DIR = os.path.join(DEFAULT_OUTPUT_DIR, "decrypted")
 
 # 日志（--quiet 时设 WARNING 级别）
 log = logging.getLogger("wechat-digest")
@@ -1065,7 +1067,7 @@ def cmd_decrypt(args):
         print("ERROR: pycryptodome 未安装", file=sys.stderr); sys.exit(1)
     cfg = load_config(); keys = load_keys()
     db_dir = cfg.get("db_dir", "")
-    out_dir = cfg.get("decrypted_dir", os.path.join(_SCRIPT_DIR, "output", "decrypted"))
+    out_dir = cfg.get("decrypted_dir", DEFAULT_DECRYPTED_DIR)
     if not db_dir or not os.path.isdir(db_dir):
         print("ERROR: db_dir 未配置或不存在", file=sys.stderr); sys.exit(1)
     if not keys:
@@ -1485,11 +1487,11 @@ def _parse_since(since_str):
 
 
 def _auto_output_path(group_name, date_str, since_min=0):
-    """自动生成输出路径：output/{safe_group}/{date}.md
+    """自动生成输出路径：<output_dir>/{safe_group}/{date}.md
     group_name: 优先使用 canonical_name（标准群名），保证同一群不会产生多个目录。
     """
     cfg = load_config()
-    out_root = cfg.get("output_dir", os.path.join(_SCRIPT_DIR, "output"))
+    out_root = cfg.get("output_dir", DEFAULT_OUTPUT_DIR)
     safe_group = _safe_name(group_name)
     fname = f"{date_str}.md"
     return os.path.join(out_root, safe_group, fname)
@@ -1817,8 +1819,8 @@ def cmd_config(args):
             db_input = input("  请输入微信数据目录: ").strip()
             if db_input:
                 cfg["db_dir"] = db_input
-        cfg.setdefault("decrypted_dir", os.path.join(_SCRIPT_DIR, "output", "decrypted"))
-        cfg.setdefault("output_dir", os.path.join(_SCRIPT_DIR, "output"))
+        cfg.setdefault("decrypted_dir", DEFAULT_DECRYPTED_DIR)
+        cfg.setdefault("output_dir", DEFAULT_OUTPUT_DIR)
         cfg.setdefault("known", {})
         save_config(cfg)
         print(f"\n  配置已保存到: {CONFIG_FILE}")
@@ -1917,7 +1919,7 @@ def main():
     p.add_argument("--no-cache", action="store_true", help="跳过提取缓存")
     p.add_argument("--report-full", action="store_true", help="在报告中包含完整聊天详情")
     p.add_argument("--prompt", help="自定义 Prompt 模板文件路径")
-    p.add_argument("--output", "-o", help="输出文件路径（默认自动保存到 output/群名/日期.md）")
+    p.add_argument("--output", "-o", help="输出文件路径（默认自动保存到用户目录下的 output/群名/日期.md）")
     p.add_argument("--since", metavar="HH:MM", help="只处理该时间点之后的消息（增量模式）")
     p.add_argument("--segment", action="store_true", help="按时间段切分摘要（每段独立调用 LLM）")
     p.add_argument("--batch-mode", action="store_true", help="使用批量推理API（成本更低，适合定时任务）")
@@ -1931,7 +1933,7 @@ def main():
     p.add_argument("--no-cache", action="store_true", help="跳过提取缓存")
     p.add_argument("--report-full", action="store_true", help="在报告中包含完整聊天详情")
     p.add_argument("--prompt", help="自定义 Prompt 模板文件路径")
-    p.add_argument("--output", "-o", help="输出文件路径（默认自动保存到 output/群名/日期.md）")
+    p.add_argument("--output", "-o", help="输出文件路径（默认自动保存到用户目录下的 output/群名/日期.md）")
     p.add_argument("--since", metavar="HH:MM", help="只处理该时间点之后的消息（增量模式）")
     p.add_argument("--segment", action="store_true", help="按时间段切分摘要（每段独立调用 LLM）")
     p.add_argument("--batch-mode", action="store_true", help="使用批量推理API（成本更低，适合定时任务）")

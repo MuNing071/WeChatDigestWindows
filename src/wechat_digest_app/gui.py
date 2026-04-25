@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QStackedWidget,
+    QStyle,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -490,6 +491,13 @@ TRANSLATIONS = {
 
 
 PAGE_KEYS = ["workbench", "setup", "reports", "logs", "settings"]
+NAV_ICON_MAP = {
+    "workbench": QStyle.SP_DesktopIcon,
+    "setup": QStyle.SP_DriveHDIcon,
+    "reports": QStyle.SP_FileIcon,
+    "logs": QStyle.SP_FileDialogDetailedView,
+    "settings": QStyle.SP_FileDialogContentsView,
+}
 
 
 class TaskSignals(QObject):
@@ -596,6 +604,7 @@ class MainWindow(QMainWindow):
         for key in PAGE_KEYS:
             item = QListWidgetItem()
             item.setData(Qt.UserRole, key)
+            item.setIcon(self.style().standardIcon(NAV_ICON_MAP[key]))
             self.nav_list.addItem(item)
         layout.addWidget(self.nav_list, 1)
 
@@ -629,10 +638,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.header_badge, 0, Qt.AlignTop)
 
         self.refresh_btn = QPushButton()
+        self.refresh_btn.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
         self.refresh_btn.clicked.connect(self._refresh_active_page)
         layout.addWidget(self.refresh_btn, 0, Qt.AlignTop)
 
         self.open_output_btn = QPushButton()
+        self.open_output_btn.setIcon(self.style().standardIcon(QStyle.SP_DirOpenIcon))
         self.open_output_btn.clicked.connect(self.open_output_folder)
         layout.addWidget(self.open_output_btn, 0, Qt.AlignTop)
         return frame
@@ -699,6 +710,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.session_count_label)
 
         self.session_list = QListWidget()
+        self.session_list.setUniformItemSizes(False)
         self.session_list.currentItemChanged.connect(self._session_changed)
         left_layout.addWidget(self.session_list, 1)
 
@@ -807,10 +819,12 @@ class MainWindow(QMainWindow):
 
         button_row = QHBoxLayout()
         self.choose_output_btn = QPushButton()
+        self.choose_output_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
         self.choose_output_btn.clicked.connect(self.choose_output_file)
         button_row.addWidget(self.choose_output_btn)
         self.generate_btn = QPushButton()
         self.generate_btn.setProperty("variant", "primary")
+        self.generate_btn.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
         self.generate_btn.clicked.connect(self.run_summary)
         button_row.addWidget(self.generate_btn)
         center_layout.addLayout(button_row)
@@ -887,6 +901,7 @@ class MainWindow(QMainWindow):
         db_inline_layout.setSpacing(8)
         db_inline_layout.addWidget(self.db_dir_edit, 1)
         self.detect_btn = QPushButton()
+        self.detect_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView))
         self.detect_btn.clicked.connect(self.detect_db_dir)
         db_inline_layout.addWidget(self.detect_btn)
         db_layout.addWidget(db_inline)
@@ -901,6 +916,7 @@ class MainWindow(QMainWindow):
         source_actions = QHBoxLayout()
         source_actions.addStretch(1)
         self.decrypt_btn = QPushButton()
+        self.decrypt_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.decrypt_btn.clicked.connect(self.decrypt_databases)
         source_actions.addWidget(self.decrypt_btn)
         source_layout.addLayout(source_actions)
@@ -951,6 +967,7 @@ class MainWindow(QMainWindow):
         provider_actions = QHBoxLayout()
         provider_actions.addStretch(1)
         self.test_btn = QPushButton()
+        self.test_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.test_btn.clicked.connect(self.test_api)
         provider_actions.addWidget(self.test_btn)
         provider_layout.addLayout(provider_actions)
@@ -991,6 +1008,7 @@ class MainWindow(QMainWindow):
         output_actions = QHBoxLayout()
         self.save_btn = QPushButton()
         self.save_btn.setProperty("variant", "primary")
+        self.save_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogSaveButton))
         self.save_btn.clicked.connect(self.save_state)
         output_actions.addWidget(self.save_btn)
         output_actions.addStretch(1)
@@ -1013,6 +1031,7 @@ class MainWindow(QMainWindow):
         self.reports_title_label = left_card.layout().itemAt(0).widget()
         self.reports_subtitle_label = left_card.layout().itemAt(1).widget()
         self.report_list = QListWidget()
+        self.report_list.setUniformItemSizes(False)
         self.report_list.currentItemChanged.connect(self._report_changed)
         left_layout.addWidget(self.report_list, 1)
         self.reports_empty_label = QLabel()
@@ -1026,6 +1045,7 @@ class MainWindow(QMainWindow):
         self.report_preview_subtitle = right_card.layout().itemAt(1).widget()
         report_actions = QHBoxLayout()
         self.open_report_folder_btn = QPushButton()
+        self.open_report_folder_btn.setIcon(self.style().standardIcon(QStyle.SP_DirOpenIcon))
         self.open_report_folder_btn.clicked.connect(self._open_selected_report_folder)
         report_actions.addWidget(self.open_report_folder_btn)
         report_actions.addStretch(1)
@@ -1420,18 +1440,35 @@ class MainWindow(QMainWindow):
     def _session_label(self, session: dict) -> str:
         name = session.get("name") or session.get("username") or ""
         username = session.get("username") or ""
-        label = name
+        secondary = []
         if username and name != username:
-            label = f"{name}  <{username}>"
+            secondary.append(username)
+        last_msg = (session.get("last_msg") or "").strip().replace("\n", " ")
+        if last_msg:
+            secondary.append(last_msg[:72] + ("..." if len(last_msg) > 72 else ""))
+        label = name
+        if secondary:
+            label = f"{name}\n" + " | ".join(secondary)
         if session.get("last_time"):
             label = f"{label}\n{session['last_time']}"
         return label
+
+    def _format_report_row(self, report: dict) -> str:
+        size = int(report.get("size", 0))
+        size_kb = max(1, round(size / 1024)) if size else 0
+        meta = f"{report['modified']} | {size_kb} KB" if size_kb else report["modified"]
+        return f"{report['title']}\n{meta}\n{report['relative_path']}"
 
     def _sessions_loaded(self, result):
         sessions, log_text = result
         self.session_list.clear()
         for session in sessions:
             item = QListWidgetItem(self._session_label(session))
+            item.setIcon(
+                self.style().standardIcon(
+                    QStyle.SP_DirIcon if str(session.get("username", "")).endswith("@chatroom") else QStyle.SP_FileDialogInfoView
+                )
+            )
             item.setData(Qt.UserRole, session)
             self.session_list.addItem(item)
         if sessions:
@@ -1580,7 +1617,8 @@ class MainWindow(QMainWindow):
         self.reports_cache = reports
         self.report_list.clear()
         for report in reports:
-            item = QListWidgetItem(f"{report['relative_path']}\n{report['modified']}")
+            item = QListWidgetItem(self._format_report_row(report))
+            item.setIcon(self.style().standardIcon(QStyle.SP_FileIcon))
             item.setData(Qt.UserRole, report)
             self.report_list.addItem(item)
         if reports:

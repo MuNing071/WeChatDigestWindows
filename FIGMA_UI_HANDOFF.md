@@ -4,7 +4,7 @@ This document is the implementation-side companion to the Figma redesign brief.
 
 ## Product Shape
 
-The desktop app is now organized as a sidebar app shell instead of a tab-first utility:
+The desktop app is organized as a sidebar app shell instead of a tab-first utility:
 
 - `工作台 / Workbench`
 - `数据源 / Data Source`
@@ -12,7 +12,7 @@ The desktop app is now organized as a sidebar app shell instead of a tab-first u
 - `运行日志 / Logs`
 - `设置 / Settings`
 
-The default landing page is `工作台`, which keeps the main task visible in one screen:
+The default landing page is `工作台 / Workbench`, which keeps the main task visible in one screen:
 
 1. choose group or DM
 2. choose single day or date range

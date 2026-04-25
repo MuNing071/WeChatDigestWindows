@@ -16,9 +16,16 @@ env/
 *.swo
 
 # Sensitive data
-*.json
-!.gitkeep
 *.env
+*.local
+DEVELOPMENT_AGENT_HANDOFF.md
+.env.*
+%USERPROFILE%/.wechat-digest/
+*.secret
+all_keys.json
+llm_config.json
+config.json
+!*.example.json
 
 # Large binary files
 *.db
@@ -36,6 +43,15 @@ wetrace-bin/
 wetrace-bin/wetrace/data/
 wechat-digest/
 .workbuddy/
+scripts/inspect/db-*.txt
+scripts/archive/**/__pycache__/
+scripts/archive/**/config.json
+scripts/archive/**/release_info.json
+scripts/archive/**/package.json
+scripts/archive/**/package-lock.json
+scripts/archive/**/tsconfig.json
+scripts/archive/**/tsconfig.app.json
+scripts/archive/**/tsconfig.node.json
 
 # Build and test
 build/

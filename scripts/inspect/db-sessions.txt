@@ -1,4 +1,0 @@
-
-=== session/session.db (6 tables): ['SessionTable', 'SessionDeleteTable', 'SessionUnreadListTable_1', 'SessionUnreadStatTable_1', 'Name2Id', 'SessionNoContactInfoTable']
-
-=== contact/contact.db (16 tables): ['contact', 'name2id', 'encrypt_name2id', 'chat_room', 'chat_room_info_detail', 'stranger', 'ticket_info', 'stranger_ticket_info', 'chatroom_member', 'biz_info', 'oplog', 'sqlite_sequence', 'openim_appid', 'openim_acct_type', 'openim_wording']

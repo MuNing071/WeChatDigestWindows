@@ -5,7 +5,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
 
 
-ROOT = Path.cwd()
+ROOT = Path(__file__).resolve().parent
 datas = collect_data_files("wechat_digest_app")
 datas += [
     (str(ROOT / "src" / "wechat_digest_app" / "vendor" / "wechat_digest" / "prompt-template.txt"), "wechat_digest_app/vendor/wechat_digest"),

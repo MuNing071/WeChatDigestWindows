@@ -1,25 +1,39 @@
 # WeChatDigestWindows
 
-Windows-first tool for turning local WeChat chat history into structured daily summaries.
+[中文说明](./README.zh-CN.md) | [Public Repo Scope](./PUBLIC_REPO_SCOPE.md) | [Architecture](./ARCHITECTURE.md) | [Security](./SECURITY.md) | [Build](./BUILD.md)
 
-It supports:
+Windows-first local tool for turning WeChat chat history into structured Markdown summaries with either a CLI or a desktop GUI.
 
-- decrypting local WeChat SQLCipher databases
-- listing recent groups and direct messages
-- fuzzy session matching
-- extracting and compacting chat messages
-- generating Markdown summaries with an LLM
-- using either a CLI or a desktop GUI
+## What This Repo Includes
 
-## What Changed In This Refactor
+- `digest.py`: the main workflow engine and CLI
+- `run_gui.py`: desktop app entry point
+- `src/wechat_digest_app/backend.py`: thin adapter layer for the GUI
+- `src/wechat_digest_app/gui.py`: PySide6 desktop shell
+- `src/wechat_digest_app/vendor/wechat_digest/`: vendored helper code for DB detection, decryption, and key scanning
 
-This repo is being turned into a cleaner open-source product repo:
+## Public Repo Safety
 
-- vendored dependency code instead of a nested Git checkout
-- GUI entry point in `run_gui.py`
-- reusable app code in `src/wechat_digest_app/`
-- local runtime data and personal outputs removed from version control
-- Windows desktop packaging under the product name `WeChatDigestWindows`
+This repository is intended to be publishable.
+
+It should contain:
+
+- source code
+- tests
+- sanitized examples
+- build and contribution docs
+- vendored third-party code with preserved attribution
+
+It should not contain:
+
+- decrypted databases
+- generated chat reports from real conversations
+- `.env` files with real values
+- `%USERPROFILE%\\.wechat-digest\\*.json`
+- local inspection dumps or screenshots from private data
+- build output folders such as `build/` or `dist/`
+
+Read [SECURITY.md](./SECURITY.md) before pushing anything public.
 
 ## Quick Start
 
@@ -29,13 +43,16 @@ This repo is being turned into a cleaner open-source product repo:
 pip install -r requirements.txt
 ```
 
-### 2. Configure local runtime
+### 2. Keep personal runtime config outside the repo
 
-The app keeps personal config outside the repo:
+The app stores local state under:
 
-- `%USERPROFILE%\.wechat-digest\config.json`
-- `%USERPROFILE%\.wechat-digest\llm_config.json`
-- `%USERPROFILE%\.wechat-digest\all_keys.json`
+- `%USERPROFILE%\\.wechat-digest\\config.json`
+- `%USERPROFILE%\\.wechat-digest\\llm_config.json`
+- `%USERPROFILE%\\.wechat-digest\\all_keys.json`
+- `%USERPROFILE%\\.wechat-digest\\output\\`
+
+Do not copy those files into this repository.
 
 ### 3. Launch the GUI
 
@@ -43,94 +60,40 @@ The app keeps personal config outside the repo:
 python run_gui.py
 ```
 
-The GUI now includes:
-
-- language switcher with Chinese default
-- setup help and privacy reminders
-- provider presets for Doubao, GLM, DeepSeek, OpenAI, OpenRouter, SiliconFlow, Ollama, and Custom
-- group and DM browsing
-- single-day and multi-day summary runs
-
 ### 4. Or use the CLI
 
 ```powershell
 python digest.py groups
 python digest.py groups --dm
-python digest.py summarize "ai 实践" 2026-04-16
-python digest.py summarize "ai 实践" today --since 14:00
-python digest.py batch "ai 实践" --last-n 7
-```
-
-## Main Commands
-
-```powershell
-python digest.py groups
-python digest.py groups --dm
-python digest.py extract "群名" 2026-04-15 --json
-python digest.py summarize "群名" 2026-04-15
-python digest.py summarize "群名" today --since 14:00
-python digest.py summarize "群名" --segment
-python digest.py batch "群名" --last-n 7
-python digest.py decrypt
-python digest.py test-api
-python digest.py config --show
+python digest.py summarize "Example Group" 2026-04-16
+python digest.py summarize "Example Group" today --since 14:00
+python digest.py batch "Example Group" --last-n 7
 ```
 
 ## GUI Scope
 
-The desktop GUI focuses on the practical daily workflow:
+The desktop app focuses on the daily workflow:
 
-- set local paths and LLM settings
-- detect DB directory
-- decrypt local databases
-- browse groups and DMs by readable names
-- run summaries with common options
-- summarize a single day or a date range
-- inspect reports and logs
-
-## Repo Layout
-
-```text
-.
-|-- digest.py
-|-- run_gui.py
-|-- src/
-|   `-- wechat_digest_app/
-|       |-- backend.py
-|       |-- gui.py
-|       `-- vendor/
-|-- tests/
-|-- examples/
-|-- ARCHITECTURE.md
-|-- BUILD.md
-|-- CONTRIBUTING.md
-|-- SECURITY.md
-`-- OPEN_SOURCE_GUI_REFACTOR_PLAN.md
-```
-
-## Privacy And Safety
-
-Do not commit:
-
-- decrypted databases
-- personal chat outputs
-- `.env` files with keys or machine paths
-- `%USERPROFILE%\.wechat-digest\` runtime config files
-- screenshots or examples containing private conversations
-
-Read [SECURITY.md](./SECURITY.md) before publishing or contributing.
+- set local DB and output paths
+- configure provider, model, and API key
+- browse groups and direct messages
+- run single-day or multi-day summaries
+- review generated reports and logs
 
 ## Testing
-
-Smoke tests:
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-The GUI smoke test uses Qt offscreen mode and does not require personal config.
+GUI smoke test:
 
-## Build A Windows App
+```powershell
+$env:QT_QPA_PLATFORM="offscreen"
+python run_gui.py --smoke-test
+```
+
+## Build
 
 ```powershell
 pip install pyinstaller
@@ -141,6 +104,6 @@ Build notes live in [BUILD.md](./BUILD.md).
 
 ## Notes
 
-- Windows is the primary target for now.
-- The desktop GUI is intentionally a thin wrapper around the same core workflow as the CLI.
-- Historical research and archive material remains under `scripts/archive/`.
+- Windows is the primary target.
+- The GUI intentionally stays thin and reuses the CLI workflow.
+- Historical experiments stay under `scripts/archive/` and should be treated as reference material, not the main product surface.

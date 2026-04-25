@@ -1,37 +1,46 @@
 # Security
 
-## Supported Use
+## Scope
 
-This project works with highly sensitive local user data.
+This project works with highly sensitive local data.
 
 That includes:
 
 - private chat history
 - local database paths
-- decryption keys
+- database decryption keys
 - model API keys
+- generated summaries derived from private conversations
 
 ## Never Commit These
 
 - `%USERPROFILE%\\.wechat-digest\\all_keys.json`
-- `%USERPROFILE%\\.wechat-digest\\config.json` if it contains personal paths you do not want public
+- `%USERPROFILE%\\.wechat-digest\\config.json`
 - `%USERPROFILE%\\.wechat-digest\\llm_config.json`
 - any `.env` file with real values
 - any decrypted `.db` file
-- generated summaries containing private data
-- screenshots of private chats unless intentionally redacted
+- any report generated from real chats
+- local inspection dumps under `scripts/inspect/`
+- screenshots that reveal private names, messages, or IDs
+- build output folders such as `build/` and `dist/`
 
-## Publishing Checklist
+## Public Repo Review
 
-Before pushing a branch publicly:
+Before pushing a branch publicly, check:
 
-1. Run `git status`
-2. Confirm `output/` is not tracked
-3. Confirm `wetrace-bin/` runtime data is not tracked
-4. Confirm no `.env` file is tracked
-5. Confirm no private keys or local machine paths appear in docs or examples
+1. `git status` is clean except for intentional source changes.
+2. No local runtime folders are tracked: `output/`, `wetrace-bin/`, `.workbuddy/`.
+3. No machine-local config files are tracked.
+4. No docs contain real paths, real chatroom IDs, or copied secrets.
+5. Examples and screenshots are synthetic or fully redacted.
 
-## Disclosure
+## Safer Documentation Practice
 
-If you discover a data exposure risk in this repo layout or code path, do not post it with live secrets or live user data. Open a private report with a redacted reproduction.
+- Use `Example Group`, `示例群聊`, or similar placeholder names.
+- Use `%USERPROFILE%` or `<your-path>` instead of real local paths.
+- Mask keys as `abc123...` only when showing format.
+- Do not paste database keys, even in historical handoff notes.
 
+## Reporting
+
+If you discover a privacy or exposure issue, report it privately with redacted evidence.
